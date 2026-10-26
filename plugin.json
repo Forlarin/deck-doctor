@@ -6,6 +6,6 @@
   "publish": {
     "tags": ["troubleshooting", "proton", "beginner"],
     "description": "Find out why a game won't launch, in plain English, and fix it with one tap.",
-    "image": "https://opengraph.githubassets.com/1/SteamDeckHomebrew/PluginLoader"
+    "image": "https://opengraph.githubassets.com/1/Forlarin/deck-doctor"
   }
 }
