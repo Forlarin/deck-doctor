@@ -37,7 +37,7 @@ Every problem has a **How to fix this** guide ([docs/fixes](docs/fixes)) and a *
 
 Deck Doctor isn't in the Decky store yet. Until then:
 
-1. Download `deck-doctor.zip` from [Releases](https://github.com/Forlarin/deck-doctor/releases) (the first release is coming soon).
+1. Download `deck-doctor.zip` from the [latest release](https://github.com/Forlarin/deck-doctor/releases/latest).
 2. On the Deck: Quick Access → Decky (plug icon) → ⚙ → **Developer** → **Install plugin from ZIP**.
 
 ## Permissions
@@ -53,6 +53,7 @@ pnpm install
 pnpm build            # frontend -> dist/index.js
 npm test              # Python tests, built from real Steam Deck logs
 scripts/deploy.sh deck@steamdeck.local   # copy to a Deck over SSH and verify checksums
+scripts/package.sh    # build out/deck-doctor.zip for a release
 ```
 
 - `py_modules/deck_doctor/steam.py` reads Steam's files (launch log, manifests, Proton installs).
