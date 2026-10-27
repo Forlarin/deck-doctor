@@ -16,3 +16,7 @@ Step-by-step fixes for every problem Deck Doctor can find.
 - [A plugin folder is source code, not a plugin](unbuilt_plugin.md)
 - [A plugin crashed when Decky started](plugin_crashed.md)
 - [Decky Loader is out of date](decky_outdated.md)
+- [The emulator isn't installed](emu_missing.md)
+- [The game file is missing](emu_rom_missing.md)
+- [Cemu has no key for this Wii U disc image](emu_cemu_keys.md)
+- [The emulator's BIOS or keys are missing](emu_bios_missing.md)

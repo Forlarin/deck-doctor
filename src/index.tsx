@@ -77,6 +77,7 @@ const REPO = "https://github.com/Forlarin/deck-doctor";
 // Findings with a step-by-step page in docs/fixes/ (kept in sync by tests/test_guides.py).
 const GUIDES = new Set([
   "anticheat_blocked", "anticheat_error", "corrupt_files", "decky_outdated", "duplicate_plugin",
+  "emu_bios_missing", "emu_cemu_keys", "emu_missing", "emu_rom_missing",
   "gpu_device_lost", "low_disk", "missing_dotnet", "missing_vcredist", "not_fully_installed",
   "plugin_crashed", "quick_exit", "trainer_new_proton", "unbuilt_plugin",
 ]);

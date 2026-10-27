@@ -142,7 +142,8 @@ def is_steam_game(appid: int) -> bool:
 
 def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dict],
               log_hits: dict, tools: list, free_bytes: Optional[int],
-              forced_tool: Optional[str] = None) -> list:
+              forced_tool: Optional[str] = None, emu: Optional[dict] = None,
+              emu_findings: Optional[list] = None) -> list:
     """Pure decision logic, kept separate from file access so it can be tested."""
     findings = []
     protondb = Fix("open_protondb", "See ProtonDB reports")
@@ -218,6 +219,9 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
             }.get(fid, [protondb])
             findings.append(Finding(fid, "problem", title, detail, evidence=f"{file}: {line}", fixes=fixes))
 
+    # EmuDeck shortcuts: specific emulator problems (missing keys, BIOS, emulator) come first.
+    findings.extend(emu_findings or [])
+
     proton = launch.proton
     forced = _tool(tools, forced_tool) if forced_tool else None
     if proton and forced and forced["label"] != proton:
@@ -251,6 +255,12 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
                       "don't name a cause. The most common fix is a different Proton version. "
                       "Change one thing at a time, and avoid switching repeatedly on games with "
                       "Denuvo, which can lock you out for 24 hours.")
+        elif emu:
+            fixes = []
+            detail = (f"It ran for only {int(launch.seconds)} seconds in {emu['name']} ({emu['console']}). "
+                      f"Deck Doctor didn't find a missing BIOS, key or emulator, so open {emu['name']} "
+                      "from Desktop Mode and load the game there to see its error message. Also check "
+                      "that the game file isn't damaged or only partly copied.")
         elif not is_steam_game(appid):
             fixes = []
             detail = (f"It ran for only {int(launch.seconds)} seconds. This is a non-Steam shortcut "
@@ -288,7 +298,13 @@ def diagnose(steam_root: str, appid: int, home: str) -> dict:
         free = None
 
     forced_tool = steam.compat_tool_for(steam_root, appid)
-    findings = run_rules(appid, launch, manifest, _match_logs(logs), tools, free, forced_tool)
+    emu, emu_findings = None, []
+    if launch and not launch.running and not is_steam_game(appid):
+        from . import emulator  # imported here: emulator.py builds on this module's Finding
+        emu = emulator.parse_shortcut(launch.command)
+        if emu:
+            emu_findings = emulator.check_emulator(emu, home, emulator.installed_flatpaks())
+    findings = run_rules(appid, launch, manifest, _match_logs(logs), tools, free, forced_tool, emu, emu_findings)
     return {
         "appid": appid,
         "last_launch": None if launch is None else {
@@ -297,6 +313,7 @@ def diagnose(steam_root: str, appid: int, home: str) -> dict:
             "proton": launch.proton,
         },
         "forced_tool": forced_tool,
+        "emulator": emu,
         "logs_checked": [os.path.basename(p) for p in logs[:10]],
         "findings": [asdict(f) for f in findings],
     }
