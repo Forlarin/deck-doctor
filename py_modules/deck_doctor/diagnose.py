@@ -55,10 +55,10 @@ LOW_SPACE_BYTES = 3 * 1024**3
 
 @dataclass
 class Fix:
-    action: str          # "verify_files" | "set_proton" | "open_protondb" | "move_plugin" | "open_decky_store" | "open_decky_settings"
+    action: str          # "verify_files" | "set_proton" | "open_protondb" | "protontricks" | "move_plugin" | "open_decky_store" | "open_decky_settings"
     label: str
     tool: Optional[str] = None     # set_proton: Steam's internal tool name
-    target: Optional[str] = None   # move_plugin: plugin folder name
+    target: Optional[str] = None   # move_plugin: plugin folder name; protontricks: winetricks verb
 
 
 @dataclass
@@ -200,18 +200,22 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
 
     for fid, title, detail in (
         ("missing_dotnet", "The game needs .NET Framework",
-         "The log mentions .NET, which isn't included in this game's Proton setup. Switching to "
-         "GE-Proton often helps; otherwise it can be installed with Protontricks."),
+         "The log mentions .NET, which isn't included in this game's Proton setup. Deck Doctor can "
+         "install it with Protontricks for you, right here in Game Mode."),
         ("missing_vcredist", "A Visual C++ runtime is missing",
          "The log says a Microsoft C++ runtime file is missing. Verifying the files usually "
-         "reinstalls it, since Steam runs the game's installers again."),
+         "reinstalls it; if not, Deck Doctor can install the runtimes with Protontricks."),
         ("gpu_device_lost", "The graphics driver crashed",
          "The game lost its connection to the GPU. A different Proton version, lower graphics "
          "settings, or DX11 mode (if the game offers it) often fixes this."),
     ):
         if fid in log_hits:
             file, line = log_hits[fid]
-            fixes = [Fix("verify_files", "Verify game files")] if fid == "missing_vcredist" else [protondb]
+            fixes = {
+                "missing_dotnet": [Fix("protontricks", "Install .NET Framework 4.8", target="dotnet48"), protondb],
+                "missing_vcredist": [Fix("verify_files", "Verify game files"),
+                                     Fix("protontricks", "Install Visual C++ runtimes", target="vcrun2022")],
+            }.get(fid, [protondb])
             findings.append(Finding(fid, "problem", title, detail, evidence=f"{file}: {line}", fixes=fixes))
 
     proton = launch.proton

@@ -1,8 +1,11 @@
 import {
   ButtonItem,
+  ConfirmModal,
+  Field,
   Navigation,
   PanelSection,
   PanelSectionRow,
+  showModal,
   Spinner,
   staticClasses,
 } from "@decky/ui";
@@ -15,7 +18,9 @@ declare const SteamClient: any;
 declare const appStore: any;
 
 type Fix = {
-  action: "verify_files" | "set_proton" | "open_protondb" | "move_plugin" | "open_decky_store" | "open_decky_settings";
+  action:
+    | "verify_files" | "set_proton" | "open_protondb" | "protontricks"
+    | "move_plugin" | "open_decky_store" | "open_decky_settings";
   label: string;
   tool: string | null;
   target: string | null;
@@ -50,6 +55,21 @@ const rememberTool = callable<[appid: number, previous: string], void>("remember
 const forgetTool = callable<[appid: number], void>("forget_tool");
 const pluginHealth = callable<[], HealthReport>("plugin_health");
 const movePlugin = callable<[folder: string], string>("move_plugin");
+const guideText = callable<[findingId: string], string>("guide");
+const saveGuideToDesktop = callable<[findingId: string], string>("save_guide_to_desktop");
+const startFix = callable<[appid: number, verb: string], FixJob>("start_fix");
+const fixStatus = callable<[], FixJob | null>("fix_status");
+
+type FixJob = {
+  appid: number;
+  verb: string;
+  label: string;
+  status: "running" | "done" | "failed";
+  step: string;
+  message: string;
+  last_line: string;
+  elapsed: number;
+};
 
 const SEVERITY_ICON = { problem: "🔴", warning: "🟡", info: "🔵" };
 
@@ -151,14 +171,153 @@ function FindingView({ finding, fixes, onFix }: { finding: Finding; fixes: Fix[]
           </ButtonItem>
         </PanelSectionRow>
       ))}
-      {GUIDES.has(finding.id) && (
-        <PanelSectionRow>
-          <ButtonItem layout="below" onClick={() => openWeb(`${REPO}/blob/main/docs/fixes/${finding.id}.md`)}>
-            How to fix this (step by step)
-          </ButtonItem>
-        </PanelSectionRow>
-      )}
+      {GUIDES.has(finding.id) && <GuideToggle findingId={finding.id} />}
     </>
+  );
+}
+
+// Which guides are expanded, kept outside React so they stay open when the menu is reopened.
+const openGuides = new Set<string>();
+
+function GuideToggle({ findingId }: { findingId: string }) {
+  const [open, setOpen] = useState(openGuides.has(findingId));
+  const toggle = () => {
+    if (open) openGuides.delete(findingId);
+    else openGuides.add(findingId);
+    setOpen(!open);
+  };
+  return (
+    <>
+      <PanelSectionRow>
+        <ButtonItem layout="below" onClick={toggle}>
+          {open ? "Hide the steps" : "How to fix this (step by step)"}
+        </ButtonItem>
+      </PanelSectionRow>
+      {open && <GuideView findingId={findingId} />}
+    </>
+  );
+}
+
+/** A fix guide shown inside the plugin. Each line is focusable so the D-pad can scroll through it. */
+function GuideView({ findingId }: { findingId: string }) {
+  const [text, setText] = useState<string | null>(null);
+  useEffect(() => {
+    guideText(findingId).then(setText).catch(() => setText(""));
+  }, [findingId]);
+
+  if (text === null) return <PanelSectionRow><Spinner /></PanelSectionRow>;
+  if (!text) {
+    return (
+      <PanelSectionRow>
+        <ButtonItem layout="below" onClick={() => openWeb(`${REPO}/blob/main/docs/fixes/${findingId}.md`)}>
+          Open the guide on the web
+        </ButtonItem>
+      </PanelSectionRow>
+    );
+  }
+
+  const blocks = text
+    .split("\n")
+    .slice(1) // the title repeats the finding's own title
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => l.replace(/\*\*(.+?)\*\*/g, "$1").replace(/`/g, "").replace(/\[(.+?)\]\(.+?\)/g, "$1"));
+
+  return (
+    <>
+      {blocks.map((line, i) =>
+        line.startsWith("## ") ? (
+          <Field key={i} focusable padding="compact" bottomSeparator="none" label={line.slice(3)} />
+        ) : (
+          <Field key={i} focusable padding="compact" bottomSeparator="none" childrenLayout="below">
+            <div style={{ fontSize: "12px", lineHeight: 1.4 }}>{line}</div>
+          </Field>
+        ),
+      )}
+      <PanelSectionRow>
+        <ButtonItem
+          layout="below"
+          onClick={async () => {
+            const path = await saveGuideToDesktop(findingId);
+            toaster.toast({ title: "Deck Doctor", body: `Saved to your Desktop: ${path.split("/").pop()}` });
+          }}
+        >
+          Save steps to Desktop
+        </ButtonItem>
+      </PanelSectionRow>
+    </>
+  );
+}
+
+// The current Protontricks job, polled while it runs. Kept outside React so progress
+// survives the Quick Access menu closing.
+let currentJob: FixJob | null = null;
+const jobListeners = new Set<(j: FixJob | null) => void>();
+let polling = false;
+
+async function pollJob() {
+  if (polling) return;
+  polling = true;
+  try {
+    do {
+      currentJob = await fixStatus();
+      jobListeners.forEach((l) => l(currentJob));
+      if (currentJob?.status !== "running") break;
+      await new Promise((r) => setTimeout(r, 3000));
+    } while (true);
+  } finally {
+    polling = false;
+  }
+  if (currentJob?.status === "done") toaster.toast({ title: "Deck Doctor", body: currentJob.message });
+  if (currentJob?.status === "failed") toaster.toast({ title: "Deck Doctor: fix failed", body: currentJob.message });
+}
+
+function useFixJob() {
+  const [job, setJob] = useState<FixJob | null>(currentJob);
+  useEffect(() => {
+    jobListeners.add(setJob);
+    pollJob();
+    return () => {
+      jobListeners.delete(setJob);
+    };
+  }, []);
+  return job;
+}
+
+function confirmProtontricks(appid: number, fix: Fix) {
+  showModal(
+    <ConfirmModal
+      strTitle={fix.label}
+      strDescription={
+        `Deck Doctor will run Protontricks to install this into ${gameName(appid)}. ` +
+        "It usually takes 5-15 minutes and runs in the background. " +
+        "Keep the game closed and the Deck plugged in until it says it's finished."
+      }
+      strOKButtonText="Install"
+      onOK={async () => {
+        currentJob = await startFix(appid, fix.target!);
+        jobListeners.forEach((l) => l(currentJob));
+        pollJob();
+      }}
+    />,
+  );
+}
+
+function FixProgress({ job }: { job: FixJob }) {
+  const icon = { running: "⏳", done: "✅", failed: "❌" }[job.status];
+  const minutes = Math.floor(job.elapsed / 60);
+  return (
+    <PanelSectionRow>
+      <div style={{ fontWeight: "bold" }}>
+        {icon} {job.label}
+      </div>
+      <div style={{ fontSize: "12px", marginTop: "4px" }}>
+        {job.status === "running" ? `${job.step} · ${minutes}m ${job.elapsed % 60}s` : job.message}
+      </div>
+      {job.last_line && job.status !== "done" && (
+        <div style={{ fontSize: "11px", marginTop: "4px", opacity: 0.6, wordBreak: "break-word" }}>{job.last_line}</div>
+      )}
+    </PanelSectionRow>
   );
 }
 
@@ -220,6 +379,7 @@ function GameCheck() {
   const [games, setGames] = useState<RecentGame[] | null>(null);
   const [report, setReportState] = useState<Report | null>(lastReport);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const job = useFixJob();
 
   const setReport = (r: Report | null) => {
     lastReport = r;
@@ -242,6 +402,13 @@ function GameCheck() {
   const runGameFix = async (r: Report, fix: Fix) => {
     if (fix.action === "verify_files") verifyFiles(r.appid);
     if (fix.action === "open_protondb") openWeb(`https://www.protondb.com/app/${r.appid}`);
+    if (fix.action === "protontricks" && fix.target) {
+      if (job?.status === "running") {
+        toaster.toast({ title: "Deck Doctor", body: `Wait for "${job.label}" to finish first.` });
+      } else {
+        confirmProtontricks(r.appid, fix);
+      }
+    }
     if (fix.action === "set_proton" && fix.tool) {
       await setProton(r, fix.tool);
       runCheckup(r.appid);
@@ -292,6 +459,7 @@ function GameCheck() {
     <>
       {report && (
         <PanelSection title={gameName(report.appid)}>
+          {job && job.appid === report.appid && <FixProgress job={job} />}
           {report.last_launch && (
             <PanelSectionRow>
               <div style={{ fontSize: "11px", opacity: 0.7 }}>

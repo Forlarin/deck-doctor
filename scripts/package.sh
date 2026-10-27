@@ -9,10 +9,11 @@ python3 -m unittest discover -s tests >/dev/null 2>&1 || { echo "Tests failed, n
 
 STAGE=$(mktemp -d)
 PKG="$STAGE/deck-doctor"
-mkdir -p "$PKG/dist" "$PKG/py_modules/deck_doctor"
+mkdir -p "$PKG/dist" "$PKG/py_modules/deck_doctor" "$PKG/docs/fixes"
 cp plugin.json main.py package.json LICENSE README.md "$PKG/"
 cp dist/index.js "$PKG/dist/"
 cp py_modules/deck_doctor/*.py "$PKG/py_modules/deck_doctor/"
+cp docs/fixes/*.md "$PKG/docs/fixes/"
 
 mkdir -p out
 rm -f out/deck-doctor.zip
