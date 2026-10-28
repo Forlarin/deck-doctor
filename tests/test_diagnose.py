@@ -186,7 +186,9 @@ class EndToEnd(unittest.TestCase):
         self.assertIn("Decompression failed", report["findings"][0]["evidence"])
 
     def test_recent_games(self):
-        self.assertEqual([g["appid"] for g in recent_games(self.root)], [SM2])
+        games = recent_games(self.root)
+        self.assertEqual([g["appid"] for g in games], [SM2])
+        self.assertIn("Spider-Man", games[0]["name"])
 
 
 if __name__ == "__main__":

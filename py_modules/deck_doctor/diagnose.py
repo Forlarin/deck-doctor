@@ -319,6 +319,17 @@ def diagnose(steam_root: str, appid: int, home: str) -> dict:
     }
 
 
+def game_name(steam_root: str, launch) -> Optional[str]:
+    """A name for the game list when Steam's own library hasn't got one (uninstalled games, demos)."""
+    manifest = steam.app_manifest(steam_root, launch.appid)
+    if manifest and manifest.get("name"):
+        return manifest["name"]
+    # The command also names the Steam runtime and Proton folders; the game's folder comes last.
+    command = launch.command.replace("'\\''", "'")  # Steam shell-quotes apostrophes as '\''
+    folders = re.findall(r"steamapps/common/([^/\"]+?)'?/", command)
+    return folders[-1] if folders else None
+
+
 def recent_games(steam_root: str, limit: int = 8) -> list:
     """App IDs of the most recently launched games, newest first, with how the last launch went."""
     seen, out = set(), []
@@ -326,7 +337,8 @@ def recent_games(steam_root: str, limit: int = 8) -> list:
         if launch.appid in seen:
             continue
         seen.add(launch.appid)
-        out.append({"appid": launch.appid, "seconds": launch.seconds, "start": launch.start.isoformat(sep=" ")})
+        out.append({"appid": launch.appid, "name": game_name(steam_root, launch),
+                    "seconds": launch.seconds, "start": launch.start.isoformat(sep=" ")})
         if len(out) >= limit:
             break
     return out

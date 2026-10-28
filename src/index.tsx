@@ -41,7 +41,7 @@ type Report = {
   logs_checked: string[];
   findings: Finding[];
 };
-type RecentGame = { appid: number; seconds: number | null; start: string };
+type RecentGame = { appid: number; name: string | null; seconds: number | null; start: string };
 type HealthReport = {
   decky_version: string | null;
   latest_version: string | null;
@@ -118,8 +118,11 @@ function HelpButton({ onClick }: { onClick: () => void }) {
 // Non-Steam shortcuts (emulators, Heroic games) get IDs above 2^31 and have no ProtonDB page.
 const isSteamGame = (appid: number) => appid < 2 ** 31;
 
+// Names the backend found in Steam's files, for games Steam's library doesn't know (uninstalled, demos).
+const fileNames = new Map<number, string>();
+
 function gameName(appid: number): string {
-  return appStore?.GetAppOverviewByAppID?.(appid)?.display_name ?? `App ${appid}`;
+  return appStore?.GetAppOverviewByAppID?.(appid)?.display_name ?? fileNames.get(appid) ?? `App ${appid}`;
 }
 
 function verifyFiles(appid: number) {
@@ -388,7 +391,10 @@ function GameCheck() {
   };
 
   useEffect(() => {
-    recentGames().then(setGames);
+    recentGames().then((list) => {
+      list.forEach((g) => g.name && fileNames.set(g.appid, g.name));
+      setGames(list);
+    });
   }, []);
 
   const runCheckup = async (id: number) => {
