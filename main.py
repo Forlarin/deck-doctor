@@ -4,9 +4,11 @@ import os
 import decky
 
 import asyncio
+from datetime import datetime
 import re
 
 from deck_doctor import available_tools, diagnose, recent_games, steam
+from deck_doctor.freeze import force_close
 from deck_doctor.fixes import ALLOWED_VERBS, Job, run_protontricks, save_steps_to_desktop
 from deck_doctor.health import move_plugin_to_backup, plugin_health
 
@@ -44,10 +46,23 @@ class Plugin:
         return recent_games(STEAM_ROOT)
 
     async def checkup(self, appid: int) -> dict:
-        report = diagnose(STEAM_ROOT, int(appid), decky.DECKY_USER_HOME)
+        forced = _load_undo().get(f"forced_{appid}")
+        report = diagnose(STEAM_ROOT, int(appid), decky.DECKY_USER_HOME,
+                          datetime.fromisoformat(forced) if forced else None)
         report["undo_tool"] = _load_undo().get(str(appid))
         decky.logger.info("checkup %s: %s", appid, [f["id"] for f in report["findings"]])
         return report
+
+    async def force_close(self, appid: int) -> int:
+        """Kill a frozen game. Needs root: Steam's launcher runs the game in its own session."""
+        killed = force_close(int(appid))
+        if killed:
+            # Remembered so the next checkup doesn't blame the game for the exit (same settings file as undo)
+            undo = _load_undo()
+            undo[f"forced_{appid}"] = datetime.now().isoformat(sep=" ", timespec="seconds")
+            _save_undo(undo)
+        decky.logger.info("force closed %s: %d processes", appid, killed)
+        return killed
 
     async def tools(self) -> list:
         return available_tools(STEAM_ROOT)

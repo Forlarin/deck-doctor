@@ -58,6 +58,7 @@ const movePlugin = callable<[folder: string], string>("move_plugin");
 const guideText = callable<[findingId: string], string>("guide");
 const saveGuideToDesktop = callable<[findingId: string], string>("save_guide_to_desktop");
 const startFix = callable<[appid: number, verb: string], FixJob>("start_fix");
+const forceClose = callable<[appid: number], number>("force_close");
 const fixStatus = callable<[], FixJob | null>("fix_status");
 
 type FixJob = {
@@ -78,8 +79,8 @@ const REPO = "https://github.com/Forlarin/deck-doctor";
 const GUIDES = new Set([
   "anticheat_blocked", "anticheat_error", "corrupt_files", "decky_outdated", "duplicate_plugin",
   "emu_bios_missing", "emu_cemu_keys", "emu_missing", "emu_rom_missing",
-  "gpu_device_lost", "low_disk", "missing_dotnet", "missing_vcredist", "not_fully_installed",
-  "plugin_crashed", "quick_exit", "trainer_new_proton", "unbuilt_plugin",
+  "game_froze", "gpu_device_lost", "gpu_hang", "low_disk", "missing_dotnet", "missing_vcredist",
+  "not_fully_installed", "out_of_memory", "plugin_crashed", "quick_exit", "trainer_new_proton", "unbuilt_plugin",
 ]);
 
 function openWeb(url: string) {
@@ -383,6 +384,7 @@ function GameCheck() {
   const [games, setGames] = useState<RecentGame[] | null>(null);
   const [report, setReportState] = useState<Report | null>(lastReport);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [closeArmed, setCloseArmed] = useState(false);
   const job = useFixJob();
 
   const setReport = (r: Report | null) => {
@@ -415,6 +417,18 @@ function GameCheck() {
       } else {
         confirmProtontricks(r.appid, fix);
       }
+    }
+    if (fix.action === "force_close") {
+      // Confirmed in the panel, not a modal: with a game running, a modal can open behind it.
+      if (!closeArmed) {
+        setCloseArmed(true);
+        setTimeout(() => setCloseArmed(false), 5000);
+        return;
+      }
+      setCloseArmed(false);
+      const killed = await forceClose(r.appid);
+      toaster.toast({ title: "Deck Doctor", body: killed ? "The game was closed." : "The game had already closed." });
+      setTimeout(() => runCheckup(r.appid), 2000);
     }
     if (fix.action === "set_proton" && fix.tool) {
       await setProton(r, fix.tool);
@@ -481,7 +495,13 @@ function GameCheck() {
             <FindingView
               key={f.id}
               finding={f}
-              fixes={f.fixes.filter((x) => x.action !== "open_protondb" || isSteamGame(report.appid))}
+              fixes={f.fixes
+                .filter((x) => x.action !== "open_protondb" || isSteamGame(report.appid))
+                .map((x) =>
+                  x.action === "force_close" && closeArmed
+                    ? { ...x, label: "Press again to force close (unsaved progress is lost)" }
+                    : x,
+                )}
               onFix={(fix) => runGameFix(report, fix)}
             />
           ))}

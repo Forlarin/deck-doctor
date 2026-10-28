@@ -1,6 +1,6 @@
 {
   "name": "deck-doctor",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Find out why a Steam Deck game will not launch, and fix it.",
   "type": "module",
   "scripts": {

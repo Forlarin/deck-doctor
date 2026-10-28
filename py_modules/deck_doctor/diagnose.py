@@ -10,7 +10,7 @@ import os
 import re
 import shutil
 from dataclasses import asdict, dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Optional
 
 from . import steam
@@ -143,7 +143,8 @@ def is_steam_game(appid: int) -> bool:
 def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dict],
               log_hits: dict, tools: list, free_bytes: Optional[int],
               forced_tool: Optional[str] = None, emu: Optional[dict] = None,
-              emu_findings: Optional[list] = None) -> list:
+              emu_findings: Optional[list] = None, kernel: Optional[dict] = None,
+              alive: bool = True, forced_at: Optional[datetime] = None) -> list:
     """Pure decision logic, kept separate from file access so it can be tested."""
     findings = []
     protondb = Fix("open_protondb", "See ProtonDB reports")
@@ -176,10 +177,49 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
             "fails), then run the checkup again so Deck Doctor has something to look at."))
         return findings
 
-    if launch.running:
+    kernel = kernel or {}
+    if launch.running and alive:
         findings.append(Finding(
             "running", "info", "The game is running right now",
-            "Deck Doctor checks the last finished launch. Close the game, then run the checkup."))
+            "Deck Doctor checks the last finished launch. Close the game, then run the checkup. "
+            "If it's frozen and won't close, force close it here.",
+            fixes=[Fix("force_close", "Force close the game")]))
+        return findings
+
+    if "gpu_hang" in kernel:
+        findings.append(Finding(
+            "gpu_hang", "problem", "The graphics chip froze during the game",
+            "The Deck's graphics driver stopped responding and had to reset, which is what a hard "
+            "freeze (frozen picture, no input) looks like. It's usually the game's graphics settings "
+            "or a Proton bug: lower the settings, cap the frame rate, or try another Proton version.",
+            evidence=kernel["gpu_hang"], fixes=[protondb]))
+    if "out_of_memory" in kernel:
+        from .freeze import oom_victim
+        victim = oom_victim(kernel["out_of_memory"])
+        findings.append(Finding(
+            "out_of_memory", "problem", "The Deck ran out of memory",
+            (f"Linux had to close {victim} because the memory was full. " if victim else
+             "The memory filled up and Linux had to close a program. ") +
+            "Before that happens, games stutter and freeze. Close other apps (especially a browser "
+            "left open in Desktop Mode), lower texture quality, and check the swap file size.",
+            evidence=kernel["out_of_memory"]))
+    if forced_at and launch.end and abs((launch.end - forced_at).total_seconds()) < 60:
+        findings.append(Finding(
+            "force_closed", "info", "You force closed this game",
+            "Deck Doctor closed it when you pressed Force close, so this launch can't show why it "
+            "froze. If it keeps freezing, run the checkup right after the next freeze, before "
+            "force closing it."))
+        return findings
+
+    if launch.running:
+        findings.append(Finding(
+            "game_froze", "problem" if not kernel else "warning", "The game didn't close normally",
+            "Steam never saw this launch end. That happens when a game freezes and the Deck is "
+            "forced off with the power button, or when Steam itself crashes. " +
+            ("The messages above show what went wrong." if kernel else
+             "The system logs don't show a graphics freeze or running out of memory, so it was "
+             "probably the game itself. Check ProtonDB for reports of the same freeze."),
+            evidence=f"Launched {launch.start:%b %d %H:%M}, never closed", fixes=[protondb]))
         return findings
 
     if "corrupt_files" in log_hits:
@@ -283,14 +323,20 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
     return findings
 
 
-def diagnose(steam_root: str, appid: int, home: str) -> dict:
+def diagnose(steam_root: str, appid: int, home: str, forced_at: Optional[datetime] = None) -> dict:
     launches = [l for l in steam.parse_launches(steam.console_lines(steam_root)) if l.appid == appid]
     launch = launches[-1] if launches else None
     manifest = steam.app_manifest(steam_root, appid)
     install_dir = None
     if manifest and manifest.get("installdir"):
         install_dir = os.path.join(manifest["_library"], "common", manifest["installdir"])
+    from . import freeze  # imported here: freeze.py is only needed for a checkup
+    alive = bool(launch and launch.running and freeze.game_processes(appid))
     logs = game_logs(steam_root, launch, install_dir) if launch and not launch.running else []
+    kernel = {}
+    if launch and not alive:
+        kernel = freeze.kernel_hits(freeze.kernel_log(
+            launch.start, (launch.end or launch.start + timedelta(hours=12)) + timedelta(seconds=5)))
     tools = steam.installed_tools(steam_root)
     try:
         free = shutil.disk_usage(home).free
@@ -304,7 +350,8 @@ def diagnose(steam_root: str, appid: int, home: str) -> dict:
         emu = emulator.parse_shortcut(launch.command)
         if emu:
             emu_findings = emulator.check_emulator(emu, home, emulator.installed_flatpaks())
-    findings = run_rules(appid, launch, manifest, _match_logs(logs), tools, free, forced_tool, emu, emu_findings)
+    findings = run_rules(appid, launch, manifest, _match_logs(logs), tools, free, forced_tool, emu, emu_findings,
+                         kernel, alive, forced_at)
     return {
         "appid": appid,
         "last_launch": None if launch is None else {
@@ -314,6 +361,7 @@ def diagnose(steam_root: str, appid: int, home: str) -> dict:
         },
         "forced_tool": forced_tool,
         "emulator": emu,
+        "running": alive,
         "logs_checked": [os.path.basename(p) for p in logs[:10]],
         "findings": [asdict(f) for f in findings],
     }

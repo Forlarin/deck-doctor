@@ -18,6 +18,8 @@ Pick any recently launched game in the Quick Access menu:
 | Missing .NET or Visual C++ runtime, GPU crash, anti-cheat error | Fix or guide for each |
 | Update still pending, internal storage almost full | Explains what to do |
 | Non-Steam shortcut (emulator) that crashes | Points you to the emulator |
+| Game froze: the GPU hung, the Deck ran out of memory, or the game never closed normally (from the kernel log) | Explains the cause and what to change |
+| Game frozen right now | Force close the game (press twice to confirm) |
 
 Every Proton change can be undone with **Undo Deck Doctor's Proton change**.
 
@@ -44,7 +46,8 @@ Deck Doctor isn't in the Decky store yet. Until then:
 
 Deck Doctor only **reads** files, with two exceptions:
 - **Proton changes and file verification** go through Steam's own client API, the same calls the game's Properties menu makes.
-- **Moving a duplicate plugin** to backup needs root, because Decky's plugins folder is owned by root. That's the only reason the plugin uses Decky's `root` flag, and the move is restricted to folders directly inside `~/homebrew/plugins`.
+- **Force close** needs root to stop every process of the frozen game (Steam's launcher, Proton, Wine, the game and any trainer). It only touches processes that carry that game's Steam ID.
+- **Moving a duplicate plugin** to backup needs root, because Decky's plugins folder is owned by root. That and force close are why the plugin uses Decky's `root` flag, and the move is restricted to folders directly inside `~/homebrew/plugins`.
 
 ## Development
 
@@ -58,6 +61,7 @@ scripts/package.sh    # build out/deck-doctor.zip for a release
 
 - `py_modules/deck_doctor/steam.py` reads Steam's files (launch log, manifests, Proton installs).
 - `py_modules/deck_doctor/diagnose.py` holds the "game won't launch" rules.
+- `py_modules/deck_doctor/freeze.py` reads the kernel log for freezes and force closes a game.
 - `py_modules/deck_doctor/health.py` holds the plugin health rules.
 - `src/index.tsx` is the Quick Access panel.
 

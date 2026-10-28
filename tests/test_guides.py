@@ -5,7 +5,7 @@ import re
 import unittest
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
-INFO_ONLY = {"no_launch", "running", "looks_ok", "plugins_ok", "changed_since_launch"}
+INFO_ONLY = {"no_launch", "running", "looks_ok", "plugins_ok", "changed_since_launch", "force_closed"}
 
 
 def finding_ids() -> set:
