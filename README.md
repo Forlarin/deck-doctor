@@ -13,6 +13,7 @@ Pick any recently launched game in the Quick Access menu:
 |---|---|
 | Damaged game files (e.g. `Decompression failed` in the game's log) | Verify game files |
 | A CheatDeck trainer running on Proton 11 / Experimental, where trainer windows don't appear | Switch to Proton 10 |
+| A CheatDeck trainer whose file name has an apostrophe (e.g. "Assassin's Creed"), which stops Proton before the game starts | Fix the launch options |
 | Game closes within a minute with no clear cause | Try Proton Experimental / Proton 10 / GE-Proton, ProtonDB |
 | Anti-cheat that blocks SteamOS (Call of Duty, Destiny 2, Apex…) | Explains why and suggests cloud gaming |
 | Missing .NET or Visual C++ runtime, GPU crash, anti-cheat error | Fix or guide for each |

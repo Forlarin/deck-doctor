@@ -144,7 +144,8 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
               log_hits: dict, tools: list, free_bytes: Optional[int],
               forced_tool: Optional[str] = None, emu: Optional[dict] = None,
               emu_findings: Optional[list] = None, kernel: Optional[dict] = None,
-              alive: bool = True, forced_at: Optional[datetime] = None) -> list:
+              alive: bool = True, forced_at: Optional[datetime] = None,
+              options: Optional[str] = None) -> list:
     """Pure decision logic, kept separate from file access so it can be tested."""
     findings = []
     protondb = Fix("open_protondb", "See ProtonDB reports")
@@ -271,7 +272,20 @@ def run_rules(appid: int, launch: Optional[steam.Launch], manifest: Optional[dic
             "then. Launch it again to test the new setting, then re-run the checkup."))
         return findings
 
-    if "PROTON_REMOTE_DEBUG_CMD" in launch.launch_env and _is_new_proton(proton):
+    trainer = trainer_cmd(launch.launch_env)
+    if trainer is not None and not _shlex_ok(trainer):
+        fixed = escape_trainer_quotes(options) if options else None
+        findings.append(Finding(
+            "trainer_path_quote", "problem", "The trainer's file name stops the game from starting",
+            "This game starts a trainer (through CheatDeck), and the trainer's file name has an "
+            "apostrophe, like \"Assassin's\". Proton can't read the path because of it, so it gives up "
+            "before the game starts, without writing a log. Deck Doctor can fix the launch options "
+            "so Proton reads the name correctly. The trainer file isn't changed.",
+            evidence=f"PROTON_REMOTE_DEBUG_CMD={trainer}",
+            fixes=[Fix("set_launch_options", "Fix the launch options", target=fixed)] if fixed else []))
+        return findings
+
+    if trainer is not None and _is_new_proton(proton):
         fixes = [Fix("set_proton", "Switch to Proton 10", "proton_10")] if _tool(tools, "proton_10") else []
         findings.append(Finding(
             "trainer_new_proton", "problem", "Trainers don't open on this Proton version",
@@ -351,7 +365,7 @@ def diagnose(steam_root: str, appid: int, home: str, forced_at: Optional[datetim
         if emu:
             emu_findings = emulator.check_emulator(emu, home, emulator.installed_flatpaks())
     findings = run_rules(appid, launch, manifest, _match_logs(logs), tools, free, forced_tool, emu, emu_findings,
-                         kernel, alive, forced_at)
+                         kernel, alive, forced_at, steam.launch_options(steam_root, appid))
     return {
         "appid": appid,
         "last_launch": None if launch is None else {
@@ -365,6 +379,31 @@ def diagnose(steam_root: str, appid: int, home: str, forced_at: Optional[datetim
         "logs_checked": [os.path.basename(p) for p in logs[:10]],
         "findings": [asdict(f) for f in findings],
     }
+
+
+TRAINER_RE = re.compile(r'PROTON_REMOTE_DEBUG_CMD="((?:[^"\\]|\\.)*)"')
+
+
+def trainer_cmd(env: str) -> Optional[str]:
+    """The trainer command CheatDeck put in the launch options, as Proton receives it."""
+    m = TRAINER_RE.search(env or "")
+    return m.group(1) if m else None
+
+
+def _shlex_ok(cmd: str) -> bool:
+    """Proton splits the trainer command with shlex.split; a lone ' or " makes it fail."""
+    import shlex
+    try:
+        shlex.split(cmd)
+        return True
+    except ValueError:
+        return False
+
+
+def escape_trainer_quotes(options: str) -> str:
+    """Put a backslash before unescaped apostrophes in the trainer path, so shlex reads them literally."""
+    return TRAINER_RE.sub(
+        lambda m: 'PROTON_REMOTE_DEBUG_CMD="%s"' % re.sub(r"(?<!\\)'", r"\\'", m.group(1)), options)
 
 
 def game_name(steam_root: str, launch) -> Optional[str]:

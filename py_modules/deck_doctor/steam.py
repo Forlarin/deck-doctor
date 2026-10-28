@@ -5,6 +5,7 @@ made from the frontend through Steam's own client API, the same way the
 game's Properties menu does it.
 """
 
+import glob
 import os
 import re
 from dataclasses import dataclass, field
@@ -119,6 +120,30 @@ def app_manifest(steam_root: str, appid: int) -> Optional[dict]:
             info = dict(re.findall(r'^\s*"(\w+)"\s+"([^"]*)"', text, re.M))
             info["_library"] = sa
             return info
+    return None
+
+
+def _vdf_block(text: str, key: str) -> list:
+    """Bodies of every `"key" { ... }` block in a VDF file."""
+    out = []
+    for m in re.finditer(r'"%s"\s*\{' % re.escape(key), text):
+        depth, i = 1, m.end()
+        while depth and i < len(text):
+            depth += {"{": 1, "}": -1}.get(text[i], 0)
+            i += 1
+        out.append(text[m.end():i - 1])
+    return out
+
+
+def launch_options(steam_root: str, appid: int) -> Optional[str]:
+    """The game's launch options as typed in Steam (Properties → Launch Options), or None."""
+    paths = glob.glob(os.path.join(steam_root, "userdata", "*", "config", "localconfig.vdf"))
+    for path in sorted(paths, key=os.path.getmtime, reverse=True):
+        text = "\n".join(_read_lines(path))
+        for body in _vdf_block(text, str(appid)):
+            m = re.search(r'^\s*"LaunchOptions"\s+"((?:[^"\\]|\\.)*)"', body, re.M)
+            if m:
+                return re.sub(r'\\(.)', r'\1', m.group(1))  # VDF escapes " and \ with a backslash
     return None
 
 

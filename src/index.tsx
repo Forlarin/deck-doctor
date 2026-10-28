@@ -80,7 +80,7 @@ const GUIDES = new Set([
   "anticheat_blocked", "anticheat_error", "corrupt_files", "decky_outdated", "duplicate_plugin",
   "emu_bios_missing", "emu_cemu_keys", "emu_missing", "emu_rom_missing",
   "game_froze", "gpu_device_lost", "gpu_hang", "low_disk", "missing_dotnet", "missing_vcredist",
-  "not_fully_installed", "out_of_memory", "plugin_crashed", "quick_exit", "trainer_new_proton", "unbuilt_plugin",
+  "not_fully_installed", "out_of_memory", "plugin_crashed", "quick_exit", "trainer_new_proton", "trainer_path_quote", "unbuilt_plugin",
 ]);
 
 function openWeb(url: string) {
@@ -429,6 +429,10 @@ function GameCheck() {
       const killed = await forceClose(r.appid);
       toaster.toast({ title: "Deck Doctor", body: killed ? "The game was closed." : "The game had already closed." });
       setTimeout(() => runCheckup(r.appid), 2000);
+    }
+    if (fix.action === "set_launch_options" && fix.target) {
+      SteamClient.Apps.SetAppLaunchOptions(r.appid, fix.target);
+      toaster.toast({ title: "Deck Doctor", body: "Launch options fixed. Start the game again to try it." });
     }
     if (fix.action === "set_proton" && fix.tool) {
       await setProton(r, fix.tool);
