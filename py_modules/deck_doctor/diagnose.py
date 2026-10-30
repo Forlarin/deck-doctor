@@ -364,8 +364,13 @@ def diagnose(steam_root: str, appid: int, home: str, forced_at: Optional[datetim
         emu = emulator.parse_shortcut(launch.command)
         if emu:
             emu_findings = emulator.check_emulator(emu, home, emulator.installed_flatpaks())
+    from . import controller  # imported here: controller.py builds on this module's Finding
+    pad = controller.check_layout(steam_root, appid)
     findings = run_rules(appid, launch, manifest, _match_logs(logs), tools, free, forced_tool, emu, emu_findings,
                          kernel, alive, forced_at, steam.launch_options(steam_root, appid))
+    if pad:
+        # A wrong controller layout matters even when the game runs fine or is running now.
+        findings = pad + [f for f in findings if f.id != "looks_ok"]
     return {
         "appid": appid,
         "last_launch": None if launch is None else {

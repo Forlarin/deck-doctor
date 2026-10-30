@@ -77,7 +77,7 @@ const SEVERITY_ICON = { problem: "🔴", warning: "🟡", info: "🔵" };
 const REPO = "https://github.com/Forlarin/deck-doctor";
 // Findings with a step-by-step page in docs/fixes/ (kept in sync by tests/test_guides.py).
 const GUIDES = new Set([
-  "anticheat_blocked", "anticheat_error", "corrupt_files", "decky_outdated", "duplicate_plugin",
+  "anticheat_blocked", "anticheat_error", "controller_layout", "corrupt_files", "decky_outdated", "duplicate_plugin",
   "emu_bios_missing", "emu_cemu_keys", "emu_missing", "emu_rom_missing",
   "game_froze", "gpu_device_lost", "gpu_hang", "low_disk", "missing_dotnet", "missing_vcredist",
   "not_fully_installed", "out_of_memory", "plugin_crashed", "quick_exit", "trainer_new_proton", "trainer_path_quote", "unbuilt_plugin",
@@ -430,6 +430,7 @@ function GameCheck() {
       toaster.toast({ title: "Deck Doctor", body: killed ? "The game was closed." : "The game had already closed." });
       setTimeout(() => runCheckup(r.appid), 2000);
     }
+    if (fix.action === "open_controller_settings") SteamClient.Apps.ShowControllerConfigurator(r.appid);
     if (fix.action === "set_launch_options" && fix.target) {
       SteamClient.Apps.SetAppLaunchOptions(r.appid, fix.target);
       toaster.toast({ title: "Deck Doctor", body: "Launch options fixed. Start the game again to try it." });

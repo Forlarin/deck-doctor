@@ -21,6 +21,7 @@ Pick any recently launched game in the Quick Access menu:
 | Non-Steam shortcut (emulator) that crashes | Points you to the emulator |
 | Game froze: the GPU hung, the Deck ran out of memory, or the game never closed normally (from the kernel log) | Explains the cause and what to change |
 | Game frozen right now | Force close the game (press twice to confirm) |
+| The game's saved controller layout has a main button mixed up (e.g. A sends RB) | Open controller settings, with steps to switch to a standard template |
 
 Every Proton change can be undone with **Undo Deck Doctor's Proton change**.
 
@@ -62,6 +63,7 @@ scripts/package.sh    # build out/deck-doctor.zip for a release
 
 - `py_modules/deck_doctor/steam.py` reads Steam's files (launch log, manifests, Proton installs).
 - `py_modules/deck_doctor/diagnose.py` holds the "game won't launch" rules.
+- `py_modules/deck_doctor/controller.py` checks the game's Steam Input layout on the Deck's own controller.
 - `py_modules/deck_doctor/freeze.py` reads the kernel log for freezes and force closes a game.
 - `py_modules/deck_doctor/health.py` holds the plugin health rules.
 - `src/index.tsx` is the Quick Access panel.

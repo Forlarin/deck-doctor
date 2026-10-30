@@ -10,7 +10,7 @@ INFO_ONLY = {"no_launch", "running", "looks_ok", "plugins_ok", "changed_since_la
 
 def finding_ids() -> set:
     ids = set()
-    for name in ("diagnose.py", "health.py", "emulator.py"):
+    for name in ("diagnose.py", "health.py", "emulator.py", "controller.py"):
         with open(os.path.join(ROOT, "py_modules", "deck_doctor", name)) as f:
             src = f.read()
         ids |= set(re.findall(r'Finding\(\s*"(\w+)"', src))
